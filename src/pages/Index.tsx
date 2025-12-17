@@ -138,6 +138,23 @@ const Index = () => {
   }, []);
 
   /**
+   * Apply adaptation settings based on WPM
+   */
+  const applyAdaptation = useCallback((wpm: number) => {
+    if (!autoAdapt) return;
+    
+    if (wpm < WPM_THRESHOLD_SLOW) {
+      console.log(`WPM ${wpm} < ${WPM_THRESHOLD_SLOW}: Applying CRITICAL settings`);
+      setSettings(CRITICAL_SETTINGS);
+      setIsAdapted(true);
+    } else if (wpm < WPM_THRESHOLD_GOOD) {
+      console.log(`WPM ${wpm} < ${WPM_THRESHOLD_GOOD}: Applying ADAPTED settings`);
+      setSettings(ADAPTED_SETTINGS);
+      setIsAdapted(true);
+    }
+  }, [autoAdapt]);
+
+  /**
    * CORE WPM CALCULATION
    * 
    * Called when user finishes reading a paragraph.
@@ -164,32 +181,26 @@ const Index = () => {
     if (totalMinutes > 0) {
       const wpm = Math.round(totalWordsReadRef.current / totalMinutes);
       setCurrentWPM(wpm);
-      
-      /**
-       * ADAPTIVE TEXT ADJUSTMENT
-       * 
-       * Based on the calculated WPM, we adjust text presentation:
-       * 
-       * WPM >= 120: Good pace - no changes needed
-       * WPM 80-119: Slow - moderate adaptation (larger font, more spacing)
-       * WPM < 80: Critical - maximum adaptation for easiest reading
-       */
-      if (autoAdapt) {
-        if (wpm < WPM_THRESHOLD_SLOW) {
-          // Critical: User is struggling significantly
-          console.log(`WPM ${wpm} < ${WPM_THRESHOLD_SLOW}: Applying CRITICAL settings`);
-          setSettings(CRITICAL_SETTINGS);
-          setIsAdapted(true);
-        } else if (wpm < WPM_THRESHOLD_GOOD) {
-          // Slow: User needs some assistance
-          console.log(`WPM ${wpm} < ${WPM_THRESHOLD_GOOD}: Applying ADAPTED settings`);
-          setSettings(ADAPTED_SETTINGS);
-          setIsAdapted(true);
-        }
-        // If WPM >= 120, we don't revert to avoid jarring changes
-      }
+      applyAdaptation(wpm);
     }
-  }, [autoAdapt]);
+  }, [applyAdaptation]);
+
+  /**
+   * Check WPM during reading (called periodically)
+   * This allows adaptation to happen while reading the current paragraph
+   */
+  const handleCheckWPM = useCallback((wordsInParagraph: number, timeMs: number) => {
+    if (!autoAdapt) return;
+    
+    // Calculate estimated WPM for current paragraph
+    const minutes = timeMs / 60000;
+    if (minutes > 0) {
+      const estimatedWPM = Math.round(wordsInParagraph / minutes);
+      
+      // Apply adaptation based on estimated WPM
+      applyAdaptation(estimatedWPM);
+    }
+  }, [autoAdapt, applyAdaptation]);
 
   /**
    * Manual settings adjustment
@@ -275,6 +286,7 @@ const Index = () => {
               onStartReading={startReading}
               onStopReading={stopReading}
               onParagraphComplete={handleParagraphComplete}
+              onCheckWPM={handleCheckWPM}
               onReset={resetReading}
               isSpeaking={isSpeaking}
               onToggleSpeech={toggleSpeech}

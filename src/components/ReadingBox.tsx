@@ -1,4 +1,4 @@
-import { useRef, useCallback, useState } from "react";
+import { useRef, useCallback, useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Play, Square, Volume2, VolumeX, ChevronRight, RotateCcw } from "lucide-react";
 
@@ -20,6 +20,7 @@ interface ReadingBoxProps {
   onReset: () => void;
   isSpeaking: boolean;
   onToggleSpeech: () => void;
+  onCheckWPM?: (wordsInParagraph: number, timeMs: number) => void;
 }
 
 export const ReadingBox = ({
@@ -33,6 +34,7 @@ export const ReadingBox = ({
   onReset,
   isSpeaking,
   onToggleSpeech,
+  onCheckWPM,
 }: ReadingBoxProps) => {
   // Split text into paragraphs
   const paragraphs = text.split("\n\n").filter(p => p.trim().length > 0);
@@ -43,7 +45,38 @@ export const ReadingBox = ({
   // Track time when current paragraph started
   const paragraphStartTime = useRef<number>(0);
   
+  // Timer for periodic WPM check
+  const checkIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  
   const isComplete = currentParagraph >= paragraphs.length;
+
+  /**
+   * Periodic WPM check - runs every 3 seconds while reading
+   * This allows adaptation to happen during reading, not just after
+   */
+  useEffect(() => {
+    if (isReading && !isComplete && onCheckWPM && paragraphStartTime.current > 0) {
+      // Check WPM every 3 seconds
+      checkIntervalRef.current = setInterval(() => {
+        const timeSpent = Date.now() - paragraphStartTime.current;
+        const wordsInParagraph = paragraphs[currentParagraph]
+          ?.trim()
+          .split(/\s+/)
+          .filter(w => w.length > 0).length || 0;
+        
+        // Only check if at least 2 seconds have passed (to avoid instant adaptation)
+        if (timeSpent >= 2000 && wordsInParagraph > 0) {
+          onCheckWPM(wordsInParagraph, timeSpent);
+        }
+      }, 3000);
+    }
+    
+    return () => {
+      if (checkIntervalRef.current) {
+        clearInterval(checkIntervalRef.current);
+      }
+    };
+  }, [isReading, isComplete, currentParagraph, paragraphs, onCheckWPM]);
 
   /**
    * Start reading the first paragraph
@@ -92,10 +125,13 @@ export const ReadingBox = ({
   const handleReset = useCallback(() => {
     setCurrentParagraph(0);
     paragraphStartTime.current = 0;
+    if (checkIntervalRef.current) {
+      clearInterval(checkIntervalRef.current);
+    }
     onReset();
   }, [onReset]);
 
-  // Dynamic styles based on adaptive settings
+  // Dynamic styles based on adaptive settings - applies immediately when settings change
   const textStyles = {
     fontSize: `${settings.fontSize}px`,
     lineHeight: settings.lineHeight,
@@ -147,9 +183,9 @@ export const ReadingBox = ({
             </p>
           </div>
         ) : (
-          // Show current paragraph
+          // Show current paragraph with adaptive styles
           <div
-            className="reading-text text-reading-text"
+            className="reading-text text-reading-text transition-all duration-300"
             style={textStyles}
           >
             <p className="leading-relaxed">{paragraphs[currentParagraph]}</p>
@@ -160,7 +196,7 @@ export const ReadingBox = ({
       {/* Adaptation Indicator */}
       {isAdapted && isReading && (
         <div className="bg-accent/50 text-accent-foreground rounded-lg p-3 text-center text-sm animate-fade-in">
-          <strong>Auto-adapted:</strong> Font size and spacing increased because your reading speed dropped below 120 WPM.
+          <strong>Auto-adapted:</strong> Font size and spacing increased to help with reading.
         </div>
       )}
 
