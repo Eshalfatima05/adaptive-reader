@@ -17,22 +17,30 @@ Research shows that comfortable reading environments can significantly improve c
 The art of reading has evolved over centuries. From ancient scrolls to modern digital screens, humans have always found ways to share knowledge through written words. Today, technology offers new opportunities to make reading more accessible to everyone.`;
 
 /**
- * Reading speed thresholds (Words Per Minute)
- * - Good: 120+ WPM (comfortable reading)
- * - Slow: 80-120 WPM (may need some assistance)
- * - Critical: <80 WPM (needs full adaptation)
+ * READING SPEED THRESHOLDS (Words Per Minute)
+ * 
+ * These thresholds determine when text adaptations are applied:
+ * 
+ * - GOOD (120+ WPM): No adaptation needed - comfortable reading pace
+ * - SLOW (80-120 WPM): Moderate adaptation - increase font/spacing slightly
+ * - CRITICAL (<80 WPM): Full adaptation - maximum font size and spacing
+ * 
+ * Average adult reading speed: 200-250 WPM
+ * Dyslexic readers often read at 100-150 WPM
+ * Below 80 WPM suggests significant difficulty
  */
 const WPM_THRESHOLD_GOOD = 120;
 const WPM_THRESHOLD_SLOW = 80;
 
-// Adaptive settings applied when reading speed drops
+// Adaptive settings applied based on reading speed
 interface AdaptiveSettings {
   fontSize: number;      // Base font size in pixels
-  lineHeight: number;    // Line height multiplier
+  lineHeight: number;    // Line height multiplier  
   letterSpacing: number; // Letter spacing in em
   wordSpacing: number;   // Word spacing in em
 }
 
+// Default settings - comfortable for most readers
 const DEFAULT_SETTINGS: AdaptiveSettings = {
   fontSize: 18,
   lineHeight: 1.6,
@@ -40,6 +48,7 @@ const DEFAULT_SETTINGS: AdaptiveSettings = {
   wordSpacing: 0,
 };
 
+// Adapted settings - applied when WPM < 120
 const ADAPTED_SETTINGS: AdaptiveSettings = {
   fontSize: 22,
   lineHeight: 2,
@@ -47,6 +56,7 @@ const ADAPTED_SETTINGS: AdaptiveSettings = {
   wordSpacing: 0.1,
 };
 
+// Critical settings - applied when WPM < 80
 const CRITICAL_SETTINGS: AdaptiveSettings = {
   fontSize: 26,
   lineHeight: 2.4,
@@ -62,6 +72,10 @@ const Index = () => {
   const [currentWPM, setCurrentWPM] = useState(0);
   const [sessionTime, setSessionTime] = useState(0);
   
+  // Track cumulative reading data for accurate WPM
+  const totalWordsReadRef = useRef(0);
+  const totalTimeSpentRef = useRef(0);
+  
   // Adaptive settings
   const [settings, setSettings] = useState<AdaptiveSettings>(DEFAULT_SETTINGS);
   const [isAdapted, setIsAdapted] = useState(false);
@@ -71,18 +85,15 @@ const Index = () => {
   const [isSpeaking, setIsSpeaking] = useState(false);
   const speechRef = useRef<SpeechSynthesisUtterance | null>(null);
   
-  // Timers
+  // Session timer
   const startTimeRef = useRef<number>(0);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
-  const wpmIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   // Calculate total words in text
   const totalWords = text.trim().split(/\s+/).filter(w => w.length > 0).length;
 
   /**
    * Start the reading session
-   * - Initializes timers
-   * - Begins tracking reading speed
    */
   const startReading = useCallback(() => {
     setIsReading(true);
@@ -90,6 +101,12 @@ const Index = () => {
     setSessionTime(0);
     setWordsRead(0);
     setCurrentWPM(0);
+    totalWordsReadRef.current = 0;
+    totalTimeSpentRef.current = 0;
+    
+    // Reset to default settings at start
+    setSettings(DEFAULT_SETTINGS);
+    setIsAdapted(false);
     
     // Update session time every second
     intervalRef.current = setInterval(() => {
@@ -99,63 +116,80 @@ const Index = () => {
 
   /**
    * Stop the reading session
-   * - Clears all timers
-   * - Preserves final statistics
    */
   const stopReading = useCallback(() => {
     setIsReading(false);
     if (intervalRef.current) clearInterval(intervalRef.current);
-    if (wpmIntervalRef.current) clearInterval(wpmIntervalRef.current);
   }, []);
 
   /**
-   * Mark progress in reading
-   * - Called when user scrolls or interacts with text
-   * - Estimates words read based on scroll position
+   * Reset everything
    */
-  const updateProgress = useCallback((scrollPercent: number) => {
-    if (!isReading) return;
-    
-    const estimatedWordsRead = Math.floor(totalWords * scrollPercent);
-    setWordsRead(estimatedWordsRead);
-    
-    // Calculate WPM: words / (minutes elapsed)
-    const minutesElapsed = (Date.now() - startTimeRef.current) / 60000;
-    if (minutesElapsed > 0.05) { // Wait at least 3 seconds before calculating
-      const wpm = Math.round(estimatedWordsRead / minutesElapsed);
-      setCurrentWPM(wpm);
-    }
-  }, [isReading, totalWords]);
+  const resetReading = useCallback(() => {
+    setIsReading(false);
+    setWordsRead(0);
+    setCurrentWPM(0);
+    setSessionTime(0);
+    setSettings(DEFAULT_SETTINGS);
+    setIsAdapted(false);
+    totalWordsReadRef.current = 0;
+    totalTimeSpentRef.current = 0;
+    if (intervalRef.current) clearInterval(intervalRef.current);
+  }, []);
 
   /**
-   * Adaptive logic: Adjust settings based on reading speed
-   * - Runs every 5 seconds during reading
-   * - Only applies changes if autoAdapt is enabled
+   * CORE WPM CALCULATION
+   * 
+   * Called when user finishes reading a paragraph.
+   * 
+   * WPM Formula: (Total Words Read) / (Total Time in Minutes)
+   * 
+   * Example:
+   * - User reads 50 words in 30 seconds (0.5 minutes)
+   * - WPM = 50 / 0.5 = 100 WPM
+   * 
+   * The running average is used to smooth out variations
+   * between paragraphs of different difficulty.
    */
-  useEffect(() => {
-    if (!isReading || !autoAdapt) return;
-
-    wpmIntervalRef.current = setInterval(() => {
-      if (currentWPM > 0) {
-        if (currentWPM < WPM_THRESHOLD_SLOW) {
-          // Critical: Apply maximum assistance
+  const handleParagraphComplete = useCallback((wordsInParagraph: number, timeMs: number) => {
+    // Update cumulative totals
+    totalWordsReadRef.current += wordsInParagraph;
+    totalTimeSpentRef.current += timeMs;
+    
+    // Update displayed words read
+    setWordsRead(totalWordsReadRef.current);
+    
+    // Calculate WPM: words / minutes
+    const totalMinutes = totalTimeSpentRef.current / 60000;
+    if (totalMinutes > 0) {
+      const wpm = Math.round(totalWordsReadRef.current / totalMinutes);
+      setCurrentWPM(wpm);
+      
+      /**
+       * ADAPTIVE TEXT ADJUSTMENT
+       * 
+       * Based on the calculated WPM, we adjust text presentation:
+       * 
+       * WPM >= 120: Good pace - no changes needed
+       * WPM 80-119: Slow - moderate adaptation (larger font, more spacing)
+       * WPM < 80: Critical - maximum adaptation for easiest reading
+       */
+      if (autoAdapt) {
+        if (wpm < WPM_THRESHOLD_SLOW) {
+          // Critical: User is struggling significantly
+          console.log(`WPM ${wpm} < ${WPM_THRESHOLD_SLOW}: Applying CRITICAL settings`);
           setSettings(CRITICAL_SETTINGS);
           setIsAdapted(true);
-        } else if (currentWPM < WPM_THRESHOLD_GOOD) {
-          // Slow: Apply moderate assistance
+        } else if (wpm < WPM_THRESHOLD_GOOD) {
+          // Slow: User needs some assistance
+          console.log(`WPM ${wpm} < ${WPM_THRESHOLD_GOOD}: Applying ADAPTED settings`);
           setSettings(ADAPTED_SETTINGS);
           setIsAdapted(true);
-        } else {
-          // Good: Gradually return to defaults (optional gentle revert)
-          // For now, maintain current settings to avoid jarring changes
         }
+        // If WPM >= 120, we don't revert to avoid jarring changes
       }
-    }, 5000);
-
-    return () => {
-      if (wpmIntervalRef.current) clearInterval(wpmIntervalRef.current);
-    };
-  }, [isReading, currentWPM, autoAdapt]);
+    }
+  }, [autoAdapt]);
 
   /**
    * Manual settings adjustment
@@ -171,8 +205,6 @@ const Index = () => {
 
   /**
    * Text-to-speech functionality
-   * - Uses browser's built-in speech synthesis
-   * - Respects user's system voice settings
    */
   const toggleSpeech = useCallback(() => {
     if (isSpeaking) {
@@ -180,7 +212,7 @@ const Index = () => {
       setIsSpeaking(false);
     } else {
       const utterance = new SpeechSynthesisUtterance(text);
-      utterance.rate = 0.9; // Slightly slower for comprehension
+      utterance.rate = 0.9;
       utterance.onend = () => setIsSpeaking(false);
       speechRef.current = utterance;
       window.speechSynthesis.speak(utterance);
@@ -192,7 +224,6 @@ const Index = () => {
   useEffect(() => {
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
-      if (wpmIntervalRef.current) clearInterval(wpmIntervalRef.current);
       window.speechSynthesis.cancel();
     };
   }, []);
@@ -243,7 +274,8 @@ const Index = () => {
               isReading={isReading}
               onStartReading={startReading}
               onStopReading={stopReading}
-              onProgressUpdate={updateProgress}
+              onParagraphComplete={handleParagraphComplete}
+              onReset={resetReading}
               isSpeaking={isSpeaking}
               onToggleSpeech={toggleSpeech}
             />
