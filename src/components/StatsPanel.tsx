@@ -28,6 +28,11 @@ export const StatsPanel = ({
 
   /**
    * Get CSS class for speed indicator
+   * 
+   * Visual feedback helps users understand their pace:
+   * - Green (good): Comfortable reading speed (120+ WPM)
+   * - Orange (slow): May benefit from adaptations (80-119 WPM)
+   * - Red (critical): Struggling, adaptations applied (<80 WPM)
    */
   const getSpeedClass = () => {
     switch (speedStatus) {
@@ -43,16 +48,16 @@ export const StatsPanel = ({
   };
 
   /**
-   * Get speed description for accessibility
+   * Get speed description for accessibility and user feedback
    */
   const getSpeedLabel = () => {
     switch (speedStatus) {
       case "good":
-        return "Good pace";
+        return "Good pace!";
       case "slow":
-        return "Adapting...";
+        return "Adapting text...";
       case "critical":
-        return "Fully adapted";
+        return "Text adapted";
       default:
         return "Ready";
     }
@@ -62,31 +67,30 @@ export const StatsPanel = ({
 
   return (
     <div className="grid grid-cols-2 md:grid-cols-4 gap-4" role="region" aria-label="Reading statistics">
-      {/* Reading Speed */}
+      {/* Reading Speed - THE KEY METRIC */}
       <div className="bg-card rounded-xl p-4 shadow-soft">
         <div className="flex items-center gap-2 text-muted-foreground mb-2">
           <Gauge className="w-4 h-4" />
-          <span className="text-sm font-medium">Speed</span>
+          <span className="text-sm font-medium">Speed (WPM)</span>
         </div>
         <div className="flex items-baseline gap-2">
-          <span className="text-2xl font-semibold text-foreground">
+          <span className="text-3xl font-bold text-foreground">
             {currentWPM}
           </span>
-          <span className="text-sm text-muted-foreground">WPM</span>
         </div>
         <div className={`speed-indicator mt-2 ${getSpeedClass()}`}>
           {getSpeedLabel()}
         </div>
       </div>
 
-      {/* Words Read */}
+      {/* Words Read - Shows actual progress through text */}
       <div className="bg-card rounded-xl p-4 shadow-soft">
         <div className="flex items-center gap-2 text-muted-foreground mb-2">
           <BookOpen className="w-4 h-4" />
-          <span className="text-sm font-medium">Progress</span>
+          <span className="text-sm font-medium">Words Read</span>
         </div>
         <div className="flex items-baseline gap-2">
-          <span className="text-2xl font-semibold text-foreground">
+          <span className="text-3xl font-bold text-foreground">
             {wordsRead}
           </span>
           <span className="text-sm text-muted-foreground">/ {totalWords}</span>
@@ -94,7 +98,7 @@ export const StatsPanel = ({
         <div className="mt-2 h-2 bg-muted rounded-full overflow-hidden">
           <div
             className="h-full bg-primary transition-all duration-300"
-            style={{ width: `${progress}%` }}
+            style={{ width: `${Math.min(progress, 100)}%` }}
             role="progressbar"
             aria-valuenow={progress}
             aria-valuemin={0}
@@ -110,26 +114,35 @@ export const StatsPanel = ({
           <span className="text-sm font-medium">Time</span>
         </div>
         <div className="flex items-baseline gap-2">
-          <span className="text-2xl font-semibold text-foreground font-mono">
+          <span className="text-3xl font-bold text-foreground font-mono">
             {formatTime(sessionTime)}
           </span>
         </div>
         <p className="text-sm text-muted-foreground mt-2">
-          {isReading ? "Reading..." : "Paused"}
+          {isReading ? "Reading..." : sessionTime > 0 ? "Paused" : "Not started"}
         </p>
       </div>
 
-      {/* Target Speed */}
+      {/* Target Speed - Educational reference */}
       <div className="bg-card rounded-xl p-4 shadow-soft">
         <div className="flex items-center gap-2 text-muted-foreground mb-2">
           <Target className="w-4 h-4" />
-          <span className="text-sm font-medium">Target</span>
+          <span className="text-sm font-medium">Thresholds</span>
         </div>
-        <div className="flex items-baseline gap-2">
-          <span className="text-2xl font-semibold text-foreground">120+</span>
-          <span className="text-sm text-muted-foreground">WPM</span>
+        <div className="space-y-1 text-sm">
+          <div className="flex justify-between">
+            <span className="text-speed-good">Good:</span>
+            <span className="font-medium">120+ WPM</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-speed-slow">Adapt:</span>
+            <span className="font-medium">80-119</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-speed-critical">Critical:</span>
+            <span className="font-medium">&lt;80 WPM</span>
+          </div>
         </div>
-        <p className="text-sm text-muted-foreground mt-2">Comfortable pace</p>
       </div>
     </div>
   );
