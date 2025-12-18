@@ -54,7 +54,11 @@ export const StudyMode = () => {
 
   const handlePdfUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
-    if (!file || file.type !== "application/pdf") {
+    if (!file) {
+      return;
+    }
+    
+    if (file.type !== "application/pdf") {
       toast({ title: "Invalid file", description: "Please upload a PDF file.", variant: "destructive" });
       return;
     }
@@ -62,10 +66,12 @@ export const StudyMode = () => {
     setIsPdfLoading(true);
     try {
       const pdfjsLib = await import("pdfjs-dist");
-      pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/4.0.379/pdf.worker.min.js`;
+      // Use unpkg CDN which is more reliable
+      pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@4.0.379/build/pdf.worker.min.mjs`;
       
       const arrayBuffer = await file.arrayBuffer();
-      const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+      const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
+      const pdf = await loadingTask.promise;
       let fullText = "";
       
       for (let i = 1; i <= pdf.numPages; i++) {
@@ -75,11 +81,15 @@ export const StudyMode = () => {
         fullText += pageText + "\n\n";
       }
 
-      setInputText(fullText.trim());
-      toast({ title: "PDF loaded!", description: `Extracted text from ${pdf.numPages} page(s).` });
+      if (fullText.trim()) {
+        setInputText(fullText.trim());
+        toast({ title: "PDF loaded!", description: `Extracted text from ${pdf.numPages} page(s).` });
+      } else {
+        toast({ title: "No text found", description: "The PDF appears to contain no extractable text.", variant: "destructive" });
+      }
     } catch (error) {
       console.error("Error reading PDF:", error);
-      toast({ title: "Error", description: "Failed to read PDF.", variant: "destructive" });
+      toast({ title: "Error", description: "Failed to read PDF. Please try a different file.", variant: "destructive" });
     } finally {
       setIsPdfLoading(false);
       if (fileInputRef.current) fileInputRef.current.value = "";

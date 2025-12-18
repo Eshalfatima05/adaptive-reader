@@ -1,6 +1,7 @@
 import { useRef, useCallback, useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { Play, Square, Volume2, VolumeX, ChevronRight, RotateCcw } from "lucide-react";
+import { Play, Square, Volume2, VolumeX, ChevronRight, RotateCcw, Focus } from "lucide-react";
+import { FocusGuide } from "./FocusGuide";
 
 interface AdaptiveSettings {
   fontSize: number;
@@ -36,6 +37,9 @@ export const ReadingBox = ({
   onToggleSpeech,
   onCheckWPM,
 }: ReadingBoxProps) => {
+  // Focus guide state
+  const [focusGuideEnabled, setFocusGuideEnabled] = useState(false);
+  const readingContainerRef = useRef<HTMLDivElement>(null);
   // Split text into paragraphs
   const paragraphs = text.split("\n\n").filter(p => p.trim().length > 0);
   
@@ -160,10 +164,13 @@ export const ReadingBox = ({
 
       {/* Reading Container */}
       <div
-        className={`reading-container transition-all duration-500 ease-out min-h-[200px] ${
+        ref={readingContainerRef}
+        className={`reading-container transition-all duration-500 ease-out min-h-[200px] relative ${
           isAdapted ? "adapted ring-2 ring-primary/20" : ""
         }`}
       >
+        <FocusGuide enabled={focusGuideEnabled && isReading} containerRef={readingContainerRef} />
+        
         {!isReading && currentParagraph === 0 ? (
           // Show preview of first paragraph before starting
           <div className="text-center py-8">
@@ -242,6 +249,17 @@ export const ReadingBox = ({
             Read Again
           </Button>
         )}
+
+        <Button
+          onClick={() => setFocusGuideEnabled(!focusGuideEnabled)}
+          variant={focusGuideEnabled ? "default" : "outline"}
+          size="lg"
+          className="gap-2"
+          aria-label={focusGuideEnabled ? "Disable focus guide" : "Enable focus guide"}
+        >
+          <Focus className="w-5 h-5" />
+          {focusGuideEnabled ? "Guide On" : "Focus Guide"}
+        </Button>
 
         <Button
           onClick={onToggleSpeech}
